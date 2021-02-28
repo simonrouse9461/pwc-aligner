@@ -165,6 +165,16 @@ class CtrlRegAlignerModel(pl.LightningModule):
         except:
             pass
         self.print(sum(outputs, []))
+        
+        self.val_acc.reset()
+        self.val_prec.reset()
+        self.val_rec.reset()
+        self.val_cm.reset()
+        self.val_acc_hc.reset()
+        self.val_prec_hc.reset()
+        self.val_rec_hc.reset()
+        self.val_cm_hc.reset()
+        
     
     def test_step(self, batch: torch.Tensor, batch_idx: int):
         output = self(**batch)
