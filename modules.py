@@ -148,7 +148,8 @@ class CtrlRegAlignerModel(pl.LightningModule):
                 hc_pre = hc_metrics['pre'].compute()[self.positive_label]
                 hc_rec = hc_metrics['rec'].compute()[self.positive_label]
                 hc_cm = hc_metrics['cm'].compute()
-                print_cm(hc_acc, hc_pre, hc_rec, hc_cm, f' (> {threshold})')
+                proportion = 100 * hc_cm.sum() / cm.sum()
+                print_cm(hc_acc, hc_pre, hc_rec, hc_cm, f' ({proportion:.2f}% > {threshold})')
             except:
                 pass
 
