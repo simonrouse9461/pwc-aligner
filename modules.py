@@ -48,21 +48,29 @@ class CtrlRegAlignerModel(pl.LightningModule):
                  model: PreTrainedModel, 
                  learning_rate: float = 1e-6,
                  lr_decay_rate: float = 0.9,
-                 hc_threshold=0.9):
+                 positive_label: 0,
+                 hc_thresholds=[0.9, 0.95]):
         super().__init__()
         self.learning_rate = learning_rate
         self.lr_decay_rate = lr_decay_rate
-        self.hc_threshold = hc_threshold
+        self.positive_label = positive_label
+        self.hc_thresholds = hc_thresholds
         self.nsp = model
         self.train_acc = metrics.Accuracy()
-        self.val_acc = metrics.Accuracy()
-        self.val_prec = metrics.Precision(num_classes=2, average='none')
-        self.val_rec = metrics.Recall(num_classes=2, average='none')
-        self.val_cm = metrics.ConfusionMatrix(num_classes=2)
-        self.val_acc_hc = metrics.Accuracy()
-        self.val_prec_hc = metrics.Precision(num_classes=2, average='none')
-        self.val_rec_hc = metrics.Recall(num_classes=2, average='none')
-        self.val_cm_hc = metrics.ConfusionMatrix(num_classes=2)
+        self.val_metrics = {
+            'acc': metrics.Accuracy(),
+            'pre': metrics.Precision(num_classes=2, average='none'),
+            'rec': metrics.Recall(num_classes=2, average='none'),
+            'cm': metrics.ConfusionMatrix(num_classes=2),
+        }
+        self.hc_val_metrics_dict = {
+            threshold: {
+                'acc': metrics.Accuracy(),
+                'pre': metrics.Precision(num_classes=2, average='none'),
+                'rec': metrics.Recall(num_classes=2, average='none'),
+                'cm': metrics.ConfusionMatrix(num_classes=2),
+            } for threshold in self.hc_thresholds
+        }
     
     def forward(self, 
                 input_ids: torch.Tensor,
@@ -103,53 +111,22 @@ class CtrlRegAlignerModel(pl.LightningModule):
         scores = F.softmax(logits, dim=1)
         labels = batch['labels']
         false_idx = logits.argmax(dim=1) != labels
-        hc_idx = scores.max(dim=1).values > self.hc_threshold
-        scores_hc = scores[hc_idx]
-        labels_hc = labels[hc_idx]
-        self.val_acc(scores, labels)
-        self.val_prec(scores, labels)
-        self.val_rec(scores, labels)
-        self.val_cm(scores, labels)
-        try:
-            self.val_acc_hc(scores_hc, labels_hc)
-            self.val_prec_hc(scores_hc, labels_hc)
-            self.val_rec_hc(scores_hc, labels_hc)
-            self.val_cm_hc(scores_hc, labels_hc)
-        except:
-            pass
-        
-        self.log('val_acc', self.val_acc, 
-                 on_step=False, 
-                 on_epoch=True, 
-                 logger=True, 
-                 prog_bar=True)
-        self.log('val_prec', self.val_prec, 
-                 on_step=False, 
-                 on_epoch=True, 
-                 logger=True, 
-                 prog_bar=True)
-        self.log('val_rec', self.val_rec, 
-                 on_step=False, 
-                 on_epoch=True, 
-                 logger=True, 
-                 prog_bar=True)
+        for metric in self.val_metrics.values():
+            metric(scores, labels)
+        for threshold, hc_metrics in self.hc_val_metrics_dict.items():
+            hc_idx = scores.max(dim=1).values > threshold
+            try:
+                for metric in hc_metrics.values():
+                    metric(scores[hc_idx], labels[hc_idx])
+            except:
+                pass
         
         torch.cuda.empty_cache()
-        return np.array([batch['raw_sent1'], batch['raw_sent2'], labels.cpu().numpy()]).T[false_idx.cpu().numpy()].tolist()
+        return (np.array([batch['raw_sent1'], batch['raw_sent2'], labels.cpu().numpy()])
+                .T[false_idx.cpu().numpy()]
+                .tolist())
     
     def validation_epoch_end(self, outputs):
-        acc = self.val_acc.compute()
-        prec = self.val_prec.compute()
-        rec = self.val_rec.compute()
-        confusion = self.val_cm.compute()
-        try:
-            acc_hc = self.val_acc_hc.compute()
-            prec_hc = self.val_prec_hc.compute()
-            rec_hc = self.val_rec_hc.compute()
-            confusion_hc = self.val_cm_hc.compute()
-        except:
-            pass
-        
         def print_cm(a, p, r, cm, suffix=''):
             scores = f'accuracy: {a:.2f}, precision: {p:.2f}, recall: {r:.2f}'
             title = 'sanity check' if self.current_epoch == 0 else f'epoch {self.current_epoch}'
@@ -159,21 +136,28 @@ class CtrlRegAlignerModel(pl.LightningModule):
                                     index=['label: -', 'label: +']))
             self.print(scores)
             
-        print_cm(acc, prec, rec, confusion)
-        try:
-            print_cm(acc_hc, prec_hc, rec_hc, confusion_hc, f' (> {self.hc_threshold})')
-        except:
-            pass
+        acc = self.val_metrics['acc'].compute()
+        pre = self.val_metrics['pre'].compute()[self.positive_label]
+        rec = self.val_metrics['rec'].compute()[self.positive_label]
+        cm = self.val_metrics['cm'].compute()
+        print_cm(acc, pre, rec, cm)
+        for threshold, hc_metrics in self.hc_val_metrics_dict.items():
+            try:
+                hc_acc = hc_metrics['acc'].compute()
+                hc_pre = hc_metrics['pre'].compute()[self.positive_label]
+                hc_rec = hc_metrics['rec'].compute()[self.positive_label]
+                hc_cm = hc_metrics['cm'].compute()
+                print_cm(hc_acc, hc_pre, hc_rec, hc_cm, f' (> {threshold})')
+            except:
+                pass
+
         self.print(sum(outputs, []))
         
-        self.val_acc.reset()
-        self.val_prec.reset()
-        self.val_rec.reset()
-        self.val_cm.reset()
-        self.val_acc_hc.reset()
-        self.val_prec_hc.reset()
-        self.val_rec_hc.reset()
-        self.val_cm_hc.reset()
+        for metric in self.val_metrics.values():
+            metric.reset()
+        for hc_metrics in self.hc_val_metrics_dict.values():
+            for metric in hc_metrics.values():
+                metric.reset()
         
     
     def test_step(self, batch: torch.Tensor, batch_idx: int):
