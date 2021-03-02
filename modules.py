@@ -133,8 +133,8 @@ class CtrlRegAlignerModel(pl.LightningModule):
             title = 'sanity check' if self.current_epoch == 0 else f'epoch {self.current_epoch}'
             self.print(f' {title}{suffix} '.center(len(scores), "="))
             self.print(pd.DataFrame(cm.long().cpu().numpy(), 
-                                    columns=['pred: -', 'pred: +'], 
-                                    index=['label: -', 'label: +']))
+                                    columns=['pred: +', 'pred: -'], 
+                                    index=['label: +', 'label: -']))
             self.print(scores)
             
         acc = self.val_metrics['acc'].compute()
