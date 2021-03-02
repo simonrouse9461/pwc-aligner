@@ -106,10 +106,11 @@ class CtrlRegAlignerModel(pl.LightningModule):
         return loss
     
     def validation_step(self, batch: torch.Tensor, batch_idx: int):
-        output = self(**batch)
+        with torch.no_grad():
+            output = self(**batch)
         losses, logits = output['loss'], output['logits']
-        scores = F.softmax(logits, dim=1)
-        labels = batch['labels']
+        scores = F.softmax(logits, dim=1).cpu()
+        labels = batch['labels'].cpu()
         false_idx = logits.argmax(dim=1) != labels
         for metric in self.val_metrics.values():
             metric(scores, labels)
