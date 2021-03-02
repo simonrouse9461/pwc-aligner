@@ -315,6 +315,15 @@ class CtrlRegMappingNSPDataModule(pl.LightningDataModule):
                 CtrlRegMappingTrainingData(shuffle=False, reg_filter='CFR', split_slice=slice(540, None)),
                 CtrlRegMappingTrainingDataOld(shuffle=False, rollup_level=3, reg_filter='CFR', split_name='val')
             )
+        if experiment == 'usc-mix':
+            self.train_data = DataMixer(
+                CtrlRegMappingTrainingData(shuffle=True, reg_filter='USC', split_slice=slice(None, 540)),
+                CtrlRegMappingTrainingDataOld(shuffle=True, rollup_level=3, reg_filter='USC', split_name='train')
+            )
+            self.val_data = DataMixer(
+                CtrlRegMappingTrainingData(shuffle=False, reg_filter='USC', split_slice=slice(540, None)),
+                CtrlRegMappingTrainingDataOld(shuffle=False, rollup_level=3, reg_filter='USC', split_name='val')
+            )
         if experiment == 'all-mix':
             self.train_data = DataMixer(
                 CtrlRegMappingTrainingData(shuffle=True, split_slice=slice(None, 900)),

@@ -56,12 +56,12 @@ class CtrlRegAlignerModel(pl.LightningModule):
         self.nsp = model
         self.train_acc = metrics.Accuracy()
         self.val_acc = metrics.Accuracy()
-        self.val_prec = metrics.Precision()
-        self.val_rec = metrics.Recall()
+        self.val_prec = metrics.Precision(num_classes=2, average='none')
+        self.val_rec = metrics.Recall(num_classes=2, average='none')
         self.val_cm = metrics.ConfusionMatrix(num_classes=2)
         self.val_acc_hc = metrics.Accuracy()
-        self.val_prec_hc = metrics.Precision()
-        self.val_rec_hc = metrics.Recall()
+        self.val_prec_hc = metrics.Precision(num_classes=2, average='none')
+        self.val_rec_hc = metrics.Recall(num_classes=2, average='none')
         self.val_cm_hc = metrics.ConfusionMatrix(num_classes=2)
     
     def forward(self, 
